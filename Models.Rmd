@@ -1,0 +1,124 @@
+---
+title: "Models"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(car)
+library(xtable)
+library(broom)
+```
+
+## Setup
+
+```{r prework ,message=FALSE, warning=FALSE}
+alpha <- 0.05
+
+find_sig <- function(model, alpha, bonferonni = F){
+  if(bonferonni){
+  model1_sum %>%
+    filter(p.value < alpha/(nrow(model1_sum))) %>%
+    select(term, estimate, p.value)
+  }
+  else{
+  model1_sum %>%
+    filter(p.value < alpha) %>%
+    select(term, estimate, p.value)
+  }
+}
+
+colleges <- read_csv(paste0("https://raw.githubusercontent.com/",
+                           "ayakkala1/final-stat-334/",
+                           "master/data/USNews.csv"))
+
+colleges <- colleges %>%
+              drop_na()
+
+head(colleges)
+```
+
+## Model Information
+
+Response: __GradRate__ (in percent of students who graduate within 6 years)
+
+###  Variables for USNews Data
+
+1. College name
+2. State (postal code)
+3. Funding (categorical variable: Public or Private)
+4. Number of applications received (in number of students)
+5. Number of applicants accepted (in number of students)
+6. Number of new students enrolled (in number of students)
+7. Pct. new students from top 10% of H.S. class (in percent)
+8. Number of fulltime undergraduates (in number of students)
+9. Out-of-state tuition (in dollars)
+10. Room and board costs (in dollars)
+11. Pct. of faculty with Ph.D.'s (in percent)
+12. Student/facultyratio (instudents per faculty member)
+13. Pct.alumni who donate (in percent)
+14. Instructionalexpenditureperstudent (in dollars)
+15. Graduation rate (in percent of students who graduate within 6 years)
+16. StdScore = the average of standardized SAT and ACT scores for students at the school (in standard deviations above or below average)
+
+Missing values are denoted with *
+
+## Default Model
+
+```{r Default Model Summary}
+explanatory <- names(colleges)[names(colleges) != "Gradrate"]
+
+model1 <- lm(Gradrate ~ Funding + Apps + Accepted + 
+                        Enrolled + Top10 + FTUG + 
+                        Tuition + RmBrd + PhD + 
+                        SFRatio + Alumni + Spending + StdScore, 
+             data = colleges)
+
+model1_sum <- tidy(summary(model1))
+
+model1_sum
+```
+
+```{r Significant Variables}
+find_sig(model1_sum, alpha, bonferonni = F)
+```
+
+```{r Correlation with Response}
+numerics <- unlist(lapply(colleges, is.numeric))
+
+correlations <- c()
+numeric_names <- names(colleges[,numerics])
+
+for (i in colleges[,numerics]){
+  correlations <- c(correlations, cor(colleges$Gradrate, i))
+}
+
+cor_with_grad <- as_tibble(cbind(numeric_names, correlations))
+
+cor_with_grad %>%
+  mutate(correlations = as.numeric(correlations)) %>%
+  filter(numeric_names != "Gradrate") %>%
+  mutate(numeric_names = fct_reorder(numeric_names, correlations)) %>%
+  ggplot(aes(x = numeric_names, y = correlations, fill = numeric_names)) +
+          geom_col() + coord_flip() + guides(fill = FALSE) +
+          xlab(element_blank()) + ylab("Correlation") +
+          ggtitle("Correlation with Graduation Rate") +
+          scale_y_continuous(breaks = seq(-1, 1, by = 0.1))
+```
+
+```{r corrplot, message=FALSE, warning=FALSE, fig.height=8, fig.width = 8}
+library(corrplot)
+
+college_corr <- cor(colleges[, numerics], method = "pearson")
+
+corrplot(college_corr, 
+         type = "upper", 
+         order = "hclust", 
+         tl.col = "black", 
+         tl.srt = 45)
+```
+
