@@ -87,6 +87,12 @@ model1_sum
 find_sig(model1_sum, alpha, bonferonni = F)
 ```
 
+```{r residualPlots}
+residualPlot(model1, type = "rstudent")
+
+qqPlot(rstudent(model1),distribution="norm",pch = 20,id = FALSE)
+```
+
 ```{r Correlation with Response}
 numerics <- unlist(lapply(colleges, is.numeric))
 
