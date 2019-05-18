@@ -21,12 +21,12 @@ alpha <- 0.05
 
 find_sig <- function(model, alpha, bonferonni = F){
   if(bonferonni){
-  model1_sum %>%
+  model %>%
     filter(p.value < alpha/(nrow(model1_sum))) %>%
     select(term, estimate, p.value)
   }
   else{
-  model1_sum %>%
+  model %>%
     filter(p.value < alpha) %>%
     select(term, estimate, p.value)
   }
@@ -35,7 +35,6 @@ find_sig <- function(model, alpha, bonferonni = F){
 colleges <- read_csv(paste0("https://raw.githubusercontent.com/",
                            "ayakkala1/final-stat-334/",
                            "master/data/USNews.csv"))
-
 colleges <- colleges %>%
               drop_na()
 
@@ -83,16 +82,73 @@ model1_sum <- tidy(summary(model1))
 model1_sum
 ```
 
+```{r Influential Observations, message=FALSE, warning=FALSE}
+tidy(cooks.distance(model1)) %>%
+  arrange(desc(x))
+```
+
+The mean GradRate in our dataset is 64. Using a rule of thumb of Cooks D > 3 times the mean is an outlier implies that none of our observations are influential observations.
+
 ```{r Significant Variables}
 find_sig(model1_sum, alpha, bonferonni = F)
 ```
 
-```{r residualPlots}
-residualPlot(model1, type = "rstudent")
-
-qqPlot(rstudent(model1),distribution="norm",pch = 20,id = FALSE)
+```{r VIF, message=FALSE, warning=FALSE}
+tidy(vif(model1)) %>%
+  filter(x >= 4)
 ```
 
+```{r residualPlots}
+residualPlots(model1, type = "rstudent")
+
+qqPlot(rstudent(model1),distribution="norm",pch = 20,id = FALSE)
+
+shapiro.test(model1$residuals)
+
+hist(model1$residuals)
+
+```
+
+- Application
+  - CV : Fan In
+  - Linearity: Okay
+- Accepted
+  - CV: Fan in
+  - Linearity: Okay
+- Enrolled
+  - CV: Fan in
+  - Linearity: Okay
+- Top10
+  - CV: Fan In
+  - Linearity: Okay
+- FTUG
+  - CV: Fan in
+  - Linearity: Okay
+- Tuition
+  - CV: Good
+  - Linearity: Good
+- RmBrd
+  - CV: Good
+  - Linearity: Good
+- PhD
+  - CV: Good
+  - Linearity: Good
+- SFRatio
+  - CV: Okay
+  - Linearity: Good
+- Alumni
+  - CV: Good
+  - Linearity: Good
+- Spending
+  - CV: Fan In
+  - Linearity: Okay
+- StdScore
+  - CV: Good
+  - Linearity: Good
+- Fitted Values
+  - CV: Okay
+  - Linearity: Okay
+  
 ```{r Correlation with Response}
 numerics <- unlist(lapply(colleges, is.numeric))
 
@@ -126,5 +182,133 @@ corrplot(college_corr,
          order = "hclust", 
          tl.col = "black", 
          tl.srt = 45)
+```
+
+# Model 2
+
+Our first plan is to create a new variable that is Accepted/Apps to get a standardized acceptance rate for each college, and also fix the high VIF.
+
+Drop FTUG
+Drop Enrolled
+
+```{r}
+colleges <- colleges %>%
+              mutate(Acceptance_Rate = Accepted/Apps)
+```
+
+```{r}
+model2 <- lm(Gradrate ~ Funding + Apps  + 
+                         Top10 + 
+                        Tuition + RmBrd + PhD + 
+                        SFRatio + Alumni + Spending + StdScore, 
+             data = colleges)
+
+anova(model1,model2)
+```
+
+We fail to reject the null hypothesis that there is no association for Gradrate and Full Time Undergraduate Students adjusted for the other predictor variabels and no association between Gradrate and Total Enrolled adjusted for the other predictor variables.
+
+So we do not have enough evidence to not drop Full Time Undergraduate Studetns and Total Enrolled from our model.
+
+```{r}
+model3 <- lm(Gradrate ~ Funding + Apps  + 
+                         Top10 + Acceptance_Rate +
+                        Tuition + RmBrd + PhD + 
+                        SFRatio + Alumni + Spending + StdScore, 
+             data = colleges)
+
+model3_sum <- tidy(summary(model3))
+
+model3_sum
+
+```
+
+```{r}
+find_sig(model3_sum, 0.05, bonferonni = F)
+```
+
+We have an additional significant beta, and our new variable is significant
+
+What is still not significant is SFRatio, Top10, and PhD
+
+```{r}
+tidy(vif(model3)) %>%
+  filter(x >= 4)
+```
+
+```{r}
+residualPlots(model3, type = "rstudent")
+
+qqPlot(rstudent(model3),distribution = "norm",pch = 20,id = FALSE)
+
+shapiro.test(model3$residuals)
+
+hist(model3$residuals)
+```
+
+## Model 4/5
+
+```{r}
+model4 <- lm(Gradrate ~ Funding + Apps  + 
+                         Acceptance_Rate +
+                        Tuition + RmBrd  + 
+                         Alumni + Spending + StdScore, 
+             data = colleges)
+
+model4_sum <- tidy(summary(model4))
+
+model4_sum
+```
+
+```{r}
+anova(model3,model4)
+```
+
+We fail to reject the null hypothesis that there is no association for Gradrate and amount of PhD Students adjusted for the other predictor variabels, no association between Gradrate and Student Faculty Ratio adjusted for the other predictor variables, and no association between Gradrate and percent of students coming from top 10 highschools adjusted for other predictor variables.
+
+So we do not have enough evidence to not drop amount of PhD Students, Student Faculty Ratio, and percent of students coming from top 10 highschools from our model.
+
+```{r}
+find_sig(model4_sum, 0.05, bonferonni = F)
+```
+
+```{r message=FALSE, warning=FALSE}
+tidy(vif(model4))
+```
+
+```{r}
+colleges <- colleges %>%
+              mutate(Gradrate_sqrt = Gradrate ^ 0.5)
+
+model5 <- lm(Gradrate_sqrt ~ Funding + Apps  + 
+                         Acceptance_Rate +
+                        Tuition + RmBrd  + 
+                         Alumni + Spending + StdScore, 
+             data = colleges)
+
+model5_sum <- tidy(summary(model5))
+
+model5_sum
+```
+
+```{r}
+residualPlots(model1, type = "rstudent")
+residualPlots(model5, type = "rstudent")
+
+qqPlot(rstudent(model1),distribution = "norm",pch = 20,id = FALSE)
+qqPlot(rstudent(model5),distribution = "norm",pch = 20,id = FALSE)
+
+shapiro.test(model5$residuals)
+
+hist(model5$residuals)
+```
+
+```{r}
+avPlots(model5,pch=20,id=FALSE)
+```
+
+```{r}
+colleges %>%
+  arrange(desc(Apps))
 ```
 
