@@ -149,6 +149,43 @@ sig.1 <- find_sig(model1_sum, alpha, bonferonni = F)
 sig.1
 ```
 
+
+We need to change the State variable to a Region variable
+
+```{r}
+
+NE.abrv <- c("CT","ME","MA","NH","RI","VT","NJ","NY","PA")
+NE.ref <- c(NE.abrv)
+
+
+MW.abrv <- c("IN","IL","MI","OH","WI","IA","KS","MN","MO","NE",
+             "ND","SD")
+MW.ref <- c(MW.abrv)
+
+
+S.abrv <- c("DE","DC","FL","GA","MD","NC","SC","VA","WV","AL",
+            "KY","MS","TN","AR","LA","OK","TX")
+S.ref <- c(S.abrv)
+
+W.abrv <- c("AZ","CO","ID","NM","MT","UT","NV","WY","AK","CA",
+            "HI","OR","WA")
+W.ref <- c(W.abrv)
+
+region.list <- list(
+  Northeast=NE.ref,
+  Midwest=MW.ref,
+  South=S.ref,
+  West=W.ref)
+
+colleges$Region <- sapply(colleges$State, 
+                 function(x) names(region.list)[grep(x,region.list)])
+
+#drop State
+colleges <- colleges[ , !(names(colleges) %in% "State")]
+```
+
+
+
 ```{r VIF, message=FALSE, warning=FALSE}
 tidy(vif(model1)) %>%
   filter(x >= 4)
