@@ -82,21 +82,78 @@ model1_sum <- tidy(summary(model1))
 model1_sum
 ```
 
-```{r Influential Observations, message=FALSE, warning=FALSE}
-tidy(cooks.distance(model1)) %>%
-  arrange(desc(x))
+```{r warning=TRUE}
+n <- nrow(colleges)
+p <- length(explanatory) + 1
+
+outlier.test.cutoff <- qt(.05/(2*n),n - p - 1,lower.tail=FALSE)
+
+residuals.1 <- rstudent(model1)
+obs.1 <- names(residuals.1)
+
+as_tibble(cbind(obs.1,as.numeric(residuals.1))) %>%
+  filter(abs(residuals.1) > outlier.test.cutoff)
 ```
 
-The mean GradRate in our dataset is 64. Using a rule of thumb of Cooks D > 3 times the mean is an outlier implies that none of our observations are influential observations.
+Observation 391 is an outlier
+
+```{r}
+numerics <- unlist(lapply(colleges, is.numeric))
+
+college.q.mat <- as.matrix(colleges[,numerics])
+
+colleges[391,"Name"]
+print(scale(college.q.mat)[391,"Gradrate"])
+```
+
+As we can see Cazenovia College is the only extreme outlier with a Graduation Rate that is 3.154105 standard deviations away from the sample mean Graduation Rate.
+
+```{r}
+colleges[391,"Gradrate"]
+```
+
+It looks like this is a mistake in the data entry because it is impossible for a college to have 118% graduation rate.
+
+```{r}
+X <- model.matrix(Gradrate ~ Funding + Apps + Accepted + 
+                        Enrolled + Top10 + FTUG + 
+                        Tuition + RmBrd + PhD + 
+                        SFRatio + Alumni + Spending + StdScore, 
+             data = colleges)
+
+H <- X %*% solve(t(X) %*% X) %*% t(X)
+
+h.values <- as.numeric(diag(H))
+
+obs.1 <- names(h.values)
+
+as_tibble(cbind(obs.1,h.values)) %>%
+  filter(h.values > ((3 * p)/n)) %>%
+  arrange(desc(h.values))
+```
+
+
+```{r Influential Observations, message=FALSE, warning=FALSE}
+cook.cutoff <- qf(0.5,p,n - p)
+
+cooks.values <- tidy(cooks.distance(model1))
+
+cooks.values %>% 
+  filter(x > cook.cutoff)
+```
+
+None of our observations our influential.
 
 ```{r Significant Variables}
-find_sig(model1_sum, alpha, bonferonni = F)
+sig.1 <- find_sig(model1_sum, alpha, bonferonni = F)
+sig.1
 ```
 
 ```{r VIF, message=FALSE, warning=FALSE}
 tidy(vif(model1)) %>%
   filter(x >= 4)
 ```
+Apps, Accepted, Enrolled, and Full Time Undergraduate all have serious multicollinearity issues, while tuition has a moderate multicollinearity.
 
 ```{r residualPlots}
 residualPlots(model1, type = "rstudent")
@@ -182,6 +239,12 @@ corrplot(college_corr,
          order = "hclust", 
          tl.col = "black", 
          tl.srt = 45)
+```
+
+Now to drop Casenovia College
+
+```{r}
+colleges <- colleges[-c(391),]
 ```
 
 # Model 2
