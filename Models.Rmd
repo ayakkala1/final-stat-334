@@ -12,6 +12,7 @@ library(tidyverse)
 library(car)
 library(xtable)
 library(broom)
+library(olsrr)
 ```
 
 ## Setup
@@ -150,45 +151,9 @@ sig.1
 ```
 
 
-We need to change the State variable to a Region variable
-
-```{r}
-
-NE.abrv <- c("CT","ME","MA","NH","RI","VT","NJ","NY","PA")
-NE.ref <- c(NE.abrv)
-
-
-MW.abrv <- c("IN","IL","MI","OH","WI","IA","KS","MN","MO","NE",
-             "ND","SD")
-MW.ref <- c(MW.abrv)
-
-
-S.abrv <- c("DE","DC","FL","GA","MD","NC","SC","VA","WV","AL",
-            "KY","MS","TN","AR","LA","OK","TX")
-S.ref <- c(S.abrv)
-
-W.abrv <- c("AZ","CO","ID","NM","MT","UT","NV","WY","AK","CA",
-            "HI","OR","WA")
-W.ref <- c(W.abrv)
-
-region.list <- list(
-  Northeast=NE.ref,
-  Midwest=MW.ref,
-  South=S.ref,
-  West=W.ref)
-
-colleges$Region <- sapply(colleges$State, 
-                 function(x) names(region.list)[grep(x,region.list)])
-
-#drop State
-colleges <- colleges[ , !(names(colleges) %in% "State")]
-```
-
-
-
 ```{r VIF, message=FALSE, warning=FALSE}
-tidy(vif(model1)) %>%
-  filter(x >= 4)
+ols_vif_tol(model1) %>%
+  filter(VIF >= 4)
 ```
 Apps, Accepted, Enrolled, and Full Time Undergraduate all have serious multicollinearity issues, while tuition has a moderate multicollinearity.
 
@@ -279,12 +244,50 @@ corrplot(college_corr,
 ```
 
 Now to drop Casenovia College
+We need to change the State variable to a Region variable
 
 ```{r}
 colleges <- colleges[-c(391),]
+
+NE.abrv <- c("CT","ME","MA","NH","RI","VT","NJ","NY","PA")
+NE.ref <- c(NE.abrv)
+
+
+MW.abrv <- c("IN","IL","MI","OH","WI","IA","KS","MN","MO","NE",
+             "ND","SD")
+MW.ref <- c(MW.abrv)
+
+
+S.abrv <- c("DE","DC","FL","GA","MD","NC","SC","VA","WV","AL",
+            "KY","MS","TN","AR","LA","OK","TX")
+S.ref <- c(S.abrv)
+
+W.abrv <- c("AZ","CO","ID","NM","MT","UT","NV","WY","AK","CA",
+            "HI","OR","WA")
+W.ref <- c(W.abrv)
+
+region.list <- list(
+  Northeast=NE.ref,
+  Midwest=MW.ref,
+  South=S.ref,
+  West=W.ref)
+
+colleges$Region <- sapply(colleges$State, 
+                 function(x) names(region.list)[grep(x,region.list)])
+
+#drop State
+colleges <- colleges[ , !(names(colleges) %in% "State")]
 ```
 
-# Model 2
+```{r}
+model1 <- lm(Gradrate ~ Funding + Apps + Accepted + 
+                        Enrolled + Top10 + FTUG + 
+                        Tuition + RmBrd + PhD + 
+                        SFRatio + Alumni + Spending + StdScore, 
+             data = colleges)
+```
+
+# Model 1.5/2
 
 Our first plan is to create a new variable that is Accepted/Apps to get a standardized acceptance rate for each college, and also fix the high VIF.
 
@@ -297,43 +300,61 @@ colleges <- colleges %>%
 ```
 
 ```{r}
-model2 <- lm(Gradrate ~ Funding + Apps  + 
-                         Top10 + 
+model1.5 <- lm(Gradrate ~ Funding + Apps + Accepted + 
+                        Enrolled + Top10 + FTUG + 
                         Tuition + RmBrd + PhD + 
-                        SFRatio + Alumni + Spending + StdScore, 
+                        SFRatio + Alumni + Spending + StdScore + Region,
              data = colleges)
 
-anova(model1,model2)
+anova(model1.5,model1)
 ```
 
-We fail to reject the null hypothesis that there is no association for Gradrate and Full Time Undergraduate Students adjusted for the other predictor variabels and no association between Gradrate and Total Enrolled adjusted for the other predictor variables.
+We reject the null hypothesis so we can conclude that that Region is associated with Graduation Rate.
 
-So we do not have enough evidence to not drop Full Time Undergraduate Studetns and Total Enrolled from our model.
+```{r}
+summary(model1.5)
+ols_vif_tol(model1.5) %>%
+  filter(VIF >= 4)
+```
+
+```{r}
+model2 <- lm(Gradrate ~ Funding + Apps  + 
+                         Top10 + 
+                        Tuition  + 
+                        Alumni + Spending + StdScore + Region, 
+             data = colleges)
+
+anova(model2,model1.5)
+```
+
+We fail to reject the null hypothesis that the slope coefficients for Enrolled, FTUG, Accepted, Rmbd, SFRatio ,PhD are equal to 0. Meaning that we can not reject for each of those predictor variables there is no association with Graduation Rate.
+
+So we will drop the variables.
 
 ```{r}
 model3 <- lm(Gradrate ~ Funding + Apps  + 
                          Top10 + Acceptance_Rate +
-                        Tuition + RmBrd + PhD + 
-                        SFRatio + Alumni + Spending + StdScore, 
+                        Tuition + 
+                        Alumni + Spending + StdScore + Region, 
              data = colleges)
 
-model3_sum <- tidy(summary(model3))
+model3_sum <- summary(model3)
 
 model3_sum
 
 ```
 
 ```{r}
-find_sig(model3_sum, 0.05, bonferonni = F)
+find_sig(tidy(model3_sum), 0.05, bonferonni = F)
 ```
 
 We have an additional significant beta, and our new variable is significant
 
 What is still not significant is SFRatio, Top10, and PhD
 
-```{r}
-tidy(vif(model3)) %>%
-  filter(x >= 4)
+```{r warning=FALSE}
+ols_vif_tol(model3) %>%
+  filter(VIF >= 4)
 ```
 
 ```{r}
@@ -373,7 +394,8 @@ find_sig(model4_sum, 0.05, bonferonni = F)
 ```
 
 ```{r message=FALSE, warning=FALSE}
-tidy(vif(model4))
+ols_vif_tol(model4) %>%
+  filter(VIF >= 4)
 ```
 
 ```{r}
