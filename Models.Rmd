@@ -317,6 +317,23 @@ ols_vif_tol(model1.5) %>%
   filter(VIF >= 4)
 ```
 
+```{r residualPlots}
+model1.5 <- lm(Gradrate  ~ Funding + Apps + Accepted + 
+                        Enrolled + Top10 + FTUG + 
+                        Tuition + RmBrd + PhD + 
+                        SFRatio + Alumni + Spending + StdScore + Region,
+             data = colleges)
+
+residualPlots(model1.5, type = "rstudent")
+
+qqPlot(rstudent(model1.5),distribution="norm",pch = 20,id = FALSE)
+
+shapiro.test(model1.5$residuals)
+
+hist(model1.5$residuals)
+
+```
+
 ```{r}
 model2 <- lm(Gradrate ~ Funding + Apps  + 
                          Top10 + 
@@ -341,20 +358,78 @@ model3 <- lm(Gradrate ~ Funding + Apps  +
 model3_sum <- summary(model3)
 
 model3_sum
-
 ```
-
-```{r}
-find_sig(tidy(model3_sum), 0.05, bonferonni = F)
-```
-
-We have an additional significant beta, and our new variable is significant
-
-What is still not significant is SFRatio, Top10, and PhD
 
 ```{r warning=FALSE}
 ols_vif_tol(model3) %>%
   filter(VIF >= 4)
+```
+
+It appears that our Accpetance_rate variable is still insignificant using the t-test. So we willnot keep it in our model.
+
+```{r}
+model4 <- lm(Gradrate ~ Funding + Apps  + 
+                         Top10  +
+                        Tuition + 
+                        Alumni + Spending + StdScore + Region, 
+             data = colleges)
+
+model4_sum <- summary(model4)
+
+model4_sum
+```
+
+```{r}
+residualPlots(model4, type = "rstudent")
+
+qqPlot(rstudent(model4),distribution="norm",pch = 20,id = FALSE)
+
+shapiro.test(model4$residuals)
+
+hist(model4$residuals)
+```
+
+```{r}
+colleges$cApps <- scale(colleges$Apps,scale=FALSE)
+colleges$cTop10 <- scale(colleges$Top10,scale=FALSE)
+colleges$cTuition <- scale(colleges$Tuition,scale=FALSE)
+colleges$cAlumni <- scale(colleges$Alumni,scale=FALSE)
+colleges$cSpending <- scale(colleges$Spending,scale=FALSE)
+colleges$cStdScore <- scale(colleges$StdScore,scale=FALSE)
+
+# Make Quality a factor with Moderate as the baseline group
+colleges$Funding <- factor(colleges$Funding)
+colleges$Region <- factor(colleges$Region)
+# Run the full model, model0
+
+full <- lm(Gradrate ~ Funding + cApps  + 
+                         cTop10  +
+                        cTuition + 
+                        cAlumni + cSpending + cStdScore + Region +
+                    Region * cApps, 
+             data = colleges)
+
+# Run a best subsets regression on model0 using the "olsrr" package
+subsets <- ols_step_all_possible(full)
+
+# View the data table showing all of the models
+View(subsets)
+
+# Plot the fit statistics for each model
+plot(subsets)
+
+# Find the model(s) that maximum Adj.R2 and minimize Cp and BIC
+best.sub <- data.frame(
+  Adj.R2 = which.max(subsets$adjr),
+  CP = which.min(subsets$cp),
+  BIC = which.min(subsets$sbc)
+)
+
+# Display the index of the best model by each criterion
+best.sub
+
+# Display the best model based on Mallow's Cp
+subsets[best.sub$CP,]
 ```
 
 ```{r}
