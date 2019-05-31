@@ -244,7 +244,9 @@ corrplot(college_corr,
 ```
 
 Now to drop Casenovia College
-We need to change the State variable to a Region variable
+We need to createa Region variable from the State variable.
+
+We use the codes from the U.S census.
 
 ```{r}
 colleges <- colleges[-c(391),]
@@ -287,6 +289,10 @@ model1 <- lm(Gradrate ~ Funding + Apps + Accepted +
              data = colleges)
 ```
 
+```{r}
+ols_vif_tol(model1)
+```
+
 # Model 1.5/2
 
 Our first plan is to create a new variable that is Accepted/Apps to get a standardized acceptance rate for each college, and also fix the high VIF.
@@ -299,26 +305,11 @@ colleges <- colleges %>%
               mutate(Acceptance_Rate = Accepted/Apps)
 ```
 
-```{r}
-model1.5 <- lm(Gradrate ~ Funding + Apps + Accepted + 
-                        Enrolled + Top10 + FTUG + 
-                        Tuition + RmBrd + PhD + 
-                        SFRatio + Alumni + Spending + StdScore + Region,
-             data = colleges)
-
-anova(model1.5,model1)
-```
 
 We reject the null hypothesis so we can conclude that that Region is associated with Graduation Rate.
 
-```{r}
-summary(model1.5)
-ols_vif_tol(model1.5) %>%
-  filter(VIF >= 4)
-```
-
 ```{r residualPlots}
-model1.5 <- lm(Gradrate  ~ Funding + Apps + Accepted + 
+model1.5 <- lm(Gradrate ~ Funding + Apps + Acceptance_Rate + 
                         Enrolled + Top10 + FTUG + 
                         Tuition + RmBrd + PhD + 
                         SFRatio + Alumni + Spending + StdScore + Region,
@@ -333,6 +324,247 @@ shapiro.test(model1.5$residuals)
 hist(model1.5$residuals)
 
 ```
+
+```{r}
+anova(model1,model1.5)
+summary(model1.5)
+ols_vif_tol(model1.5) %>%
+  filter(VIF >= 4)
+```
+
+
+```{r}
+colleges$Yield <- colleges$Enrolled/colleges$Accepted
+colleges$RatioFA <- colleges$FTUG/colleges$Apps
+
+model1.7 <- lm(Gradrate ~ Funding + Acceptance_Rate + Apps + 
+                        Yield + Top10 + RatioFA + 
+                        Tuition + RmBrd + PhD + 
+                        SFRatio + Alumni + Spending + StdScore + Region, 
+             data = colleges)
+
+ols_vif_tol(model1.7) %>%
+  filter(VIF >= 3)
+```
+
+```{r}
+model1.7 <- lm(Gradrate ~ Funding + Acceptance_Rate + Apps + 
+                        Yield + Top10 + RatioFA + 
+                        Tuition + RmBrd + PhD + 
+                        SFRatio + Alumni + Spending + StdScore + Region, 
+             data = colleges)
+
+residualPlots(model1.7, type = "rstudent")
+
+qqPlot(rstudent(model1.7),distribution="norm",pch = 20,id = FALSE)
+
+shapiro.test(model1.7$residuals)
+
+hist(model1.7$residuals)
+```
+
+```{r}
+colleges$cApps <- scale(colleges$Apps,scale=FALSE)
+colleges$cTop10 <- scale(colleges$Top10,scale=FALSE)
+colleges$cTuition <- scale(colleges$Tuition,scale=FALSE)
+colleges$cAlumni <- scale(colleges$Alumni,scale=FALSE)
+colleges$cSpending <- scale(colleges$Spending,scale=FALSE)
+colleges$cStdScore <- scale(colleges$StdScore,scale=FALSE)
+colleges$cAcceptance_Rate <- scale(colleges$Acceptance_Rate,scale=FALSE)
+colleges$cYield <- scale(colleges$Yield,scale=FALSE)
+colleges$cSFRatio <- scale(colleges$SFRatio,scale=FALSE)
+colleges$cRmBrd <- scale(colleges$RmBrd,scale=FALSE)
+colleges$cPhD <- scale(colleges$PhD,scale=FALSE)
+colleges$cRatioFA <- scale(colleges$RatioFA,scale=FALSE)
+
+# Make Quality a factor with Moderate as the baseline group
+colleges$Funding <- factor(colleges$Funding)
+colleges$Region <- factor(colleges$Region)
+# Run the full model, model0
+
+full <- lm(Gradrate ~ Funding + cAcceptance_Rate + cApps + 
+                        cYield + cTop10 + cRatioFA + 
+                        cTuition + cRmBrd + cPhD + 
+                        cSFRatio + cAlumni + cSpending + cStdScore + Region, 
+             data = colleges)
+
+# Run a best subsets regression on model0 using the "olsrr" package
+subsets <- ols_step_all_possible(full)
+
+# View the data table showing all of the models
+View(subsets)
+
+# Plot the fit statistics for each model
+plot(subsets)
+
+# Find the model(s) that maximum Adj.R2 and minimize Cp and BIC
+best.sub <- data.frame(
+  Adj.R2 = which.max(subsets$adjr),
+  CP = which.min(subsets$cp),
+  BIC = which.min(subsets$sbc)
+)
+
+# Display the index of the best model by each criterion
+best.sub
+
+# Display the best model based on Mallow's Cp
+subsets[best.sub$CP,]
+```
+
+Funding cAcceptance_Rate cApps cTop10 cTuition cRmBrd cAlumni cSpending cStdScore Region
+
+
+```{r}
+model1.8 <- lm(Gradrate ~ Funding + cAcceptance_Rate + cApps + cTop10 + 
+                 cTuition + cRmBrd + cAlumni + cSpending + cStdScore + Region, data = colleges)
+```
+
+
+```{r}
+model2 <- lm(Gradrate ~ Funding + cAcceptance_Rate + cApps + cTop10 + 
+                 cTuition + cRmBrd + cAlumni + cSpending + cStdScore + Region +
+               Region * cAcceptance_Rate + Region * cApps + Region * cTop10 +
+               Region * cTuition + Region * cRmBrd + Region * cAlumni + Region * cSpending +
+               Region * cStdScore, data = colleges)
+
+summary(model2)
+
+anova(model1.8,model2)
+```
+
+
+
+So we can no reason not to drop all of the interactions with Region
+
+```{r}
+model2.1 <- lm(Gradrate ~ Funding + cAcceptance_Rate + cApps + cTop10 + 
+                 cTuition + cRmBrd + cAlumni + cSpending + cStdScore + Region +
+               Funding * cAcceptance_Rate + Funding * cApps + Funding * cTop10 +
+               Funding * cTuition + Funding * cRmBrd + Funding * cAlumni + Funding * cSpending +
+               Funding * cStdScore, data = colleges)
+
+summary(model2.1)
+
+anova(model1.8,model2.1)
+```
+
+
+So we have no reason not to drop all the interactions with Funding
+
+
+
+```{r}
+model2.2 <- lm(Gradrate ~ Funding + cAcceptance_Rate + cApps + cTop10 + 
+                 cTuition + cRmBrd + cAlumni + cSpending + cStdScore + Region +
+               Funding * Region, data = colleges)
+
+summary(model2.2)
+
+anova(model1.8,model2.2)
+```
+
+So we have no reason not to drop all the interactions
+
+```{r}
+quant_coeff <- c("cAcceptance_Rate","cApps","cTop10","cTuition","cRmBrd","cAlumni","cSpending","cStdScore")
+combos <- combn(quant_coeff,2)
+
+model2.3 <- lm(Gradrate ~ Funding + cAcceptance_Rate + cApps + cTop10 + 
+                 cTuition + cRmBrd + cAlumni + cSpending + cStdScore + Region +
+               cAcceptance_Rate * cApps +  cAcceptance_Rate * cTop10 + cAcceptance_Rate * cTuition + cAcceptance_Rate * cRmBrd +
+                 cAcceptance_Rate * cAlumni + cAcceptance_Rate * cSpending + cAcceptance_Rate * cStdScore + 
+                 cApps * cTop10 + cApps * cTuition + cApps * cRmBrd + cApps * cAlumni + cApps * cSpending + cApps * cStdScore + 
+                 cTop10 * cTuition + cTop10 * cRmBrd + cTop10 * cAlumni + cTop10 * cSpending +cTop10 * cStdScore + 
+                 cTuition * cRmBrd + cTuition * cAlumni + cTuition * cSpending + cTuition * cStdScore + 
+                 cRmBrd * cAlumni + cRmBrd * cSpending +  cRmBrd * cStdScore +  cAlumni * cSpending +  cAlumni * cStdScore +  cSpending * cStdScore
+                 , data = colleges)
+
+summary(model2.3)
+
+anova(model1.8,model2.3)
+```
+
+There are some interactions that are associated with Graduation Rate
+
+```{r}
+ols_vif_tol(model2.3) %>%
+  filter(VIF >= 4)
+```
+
+```{r}
+model2.4 <- lm(Gradrate ~ Funding + cAcceptance_Rate + cApps + cTop10 + 
+                 cTuition + cRmBrd + cAlumni + cSpending + cStdScore + Region +
+               cTop10:cSpending + cApps:cRmBrd  + cApps:cStdScore 
+                 , data = colleges)
+
+anova(model2.3,model2.4)
+```
+
+```{r}
+summary(model2.4)
+```
+
+
+
+```{r LastModelPlots}
+model2.4 <- lm(Gradrate  ~ Funding + cAcceptance_Rate + cApps + cTop10 + 
+                 cTuition + cRmBrd + cAlumni + cSpending + cStdScore + Region +
+               cTop10:cSpending + cApps:cRmBrd  + cApps:cStdScore 
+                 , data = colleges)
+
+residualPlots(model2.4, type = "rstudent")
+
+qqPlot(rstudent(model2.4),distribution="norm",pch = 20,id = FALSE)
+
+shapiro.test(model2.4$residuals)
+
+hist(model2.4$residuals)
+```
+
+```{r}
+n <- nrow(colleges)
+p <- length(model2.4)
+
+outlier.test.cutoff <- qt(.05/(2*n),n - p - 1,lower.tail=FALSE)
+
+residuals.1 <- rstudent(model2.4)
+obs.1 <- names(residuals.1)
+
+as_tibble(cbind(obs.1,as.numeric(residuals.1))) %>%
+  filter(abs(residuals.1) > outlier.test.cutoff)
+```
+
+```{r}
+X <- model.matrix(Gradrate  ~ Funding + cAcceptance_Rate + cApps + cTop10 + 
+                 cTuition + cRmBrd + cAlumni + cSpending + cStdScore + Region +
+               cTop10:cSpending + cApps:cRmBrd  + cApps:cStdScore 
+                 , data = colleges)
+
+H <- X %*% solve(t(X) %*% X) %*% t(X)
+
+h.values <- as.numeric(diag(H))
+
+obs.1 <- names(h.values)
+
+as_tibble(cbind(obs.1,h.values)) %>%
+  filter(h.values > ((3 * p)/n)) %>%
+  arrange(desc(h.values))
+```
+
+
+```{r}
+cook.cutoff <- qf(0.5,p,n - p)
+
+cooks.values <- tidy(cooks.distance(model2.4))
+
+cooks.values %>% 
+  filter(x > cook.cutoff)
+```
+
+
+
+
+
 
 ```{r}
 model2 <- lm(Gradrate ~ Funding + Apps  + 
@@ -406,7 +638,8 @@ full <- lm(Gradrate ~ Funding + cApps  +
                          cTop10  +
                         cTuition + 
                         cAlumni + cSpending + cStdScore + Region +
-                    Region * cApps, 
+                    Region * cApps + Region * cTop10 + Region * cTuition +
+                    Region * cAlumni + Region * cSpending + Region * cStdScore,
              data = colleges)
 
 # Run a best subsets regression on model0 using the "olsrr" package
@@ -442,70 +675,20 @@ shapiro.test(model3$residuals)
 hist(model3$residuals)
 ```
 
-## Model 4/5
+## JMP Stepwise
 
 ```{r}
-model4 <- lm(Gradrate ~ Funding + Apps  + 
-                         Acceptance_Rate +
-                        Tuition + RmBrd  + 
-                         Alumni + Spending + StdScore, 
-             data = colleges)
+#Funding, Region, Applications, top10, tuition ,Rmbrd, alumni, spending, #stdscore, acceptance rate
 
-model4_sum <- tidy(summary(model4))
+model5 <- lm(Gradrate ~ Funding + Region + Apps + Top10 +
+               Tuition + RmBrd + Alumni + Spending +
+               StdScore + Acceptance_Rate,data = colleges)
 
-model4_sum
+summary(model5)
 ```
 
 ```{r}
-anova(model3,model4)
-```
-
-We fail to reject the null hypothesis that there is no association for Gradrate and amount of PhD Students adjusted for the other predictor variabels, no association between Gradrate and Student Faculty Ratio adjusted for the other predictor variables, and no association between Gradrate and percent of students coming from top 10 highschools adjusted for other predictor variables.
-
-So we do not have enough evidence to not drop amount of PhD Students, Student Faculty Ratio, and percent of students coming from top 10 highschools from our model.
-
-```{r}
-find_sig(model4_sum, 0.05, bonferonni = F)
-```
-
-```{r message=FALSE, warning=FALSE}
-ols_vif_tol(model4) %>%
-  filter(VIF >= 4)
-```
-
-```{r}
-colleges <- colleges %>%
-              mutate(Gradrate_sqrt = Gradrate ^ 0.5)
-
-model5 <- lm(Gradrate_sqrt ~ Funding + Apps  + 
-                         Acceptance_Rate +
-                        Tuition + RmBrd  + 
-                         Alumni + Spending + StdScore, 
-             data = colleges)
-
-model5_sum <- tidy(summary(model5))
-
-model5_sum
-```
-
-```{r}
-residualPlots(model1, type = "rstudent")
-residualPlots(model5, type = "rstudent")
-
-qqPlot(rstudent(model1),distribution = "norm",pch = 20,id = FALSE)
-qqPlot(rstudent(model5),distribution = "norm",pch = 20,id = FALSE)
-
-shapiro.test(model5$residuals)
-
-hist(model5$residuals)
-```
-
-```{r}
-avPlots(model5,pch=20,id=FALSE)
-```
-
-```{r}
-colleges %>%
-  arrange(desc(Apps))
+ols_vif_tol(model5) %>%
+  filter(VIF >= 3)
 ```
 
