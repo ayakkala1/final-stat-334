@@ -565,6 +565,7 @@ cooks.values %>%
 
 
 
+# IGNORE EVERYTHING BELOW
 
 ```{r}
 model2 <- lm(Gradrate ~ Funding + Apps  + 
