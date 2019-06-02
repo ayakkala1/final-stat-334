@@ -443,8 +443,6 @@ model2.1 <- lm(Gradrate ~ Funding + cAcceptance_Rate + cApps + cTop10 +
                Funding * cTuition + Funding * cRmBrd + Funding * cAlumni + Funding * cSpending +
                Funding * cStdScore, data = colleges)
 
-summary(model2.1)
-
 anova(model1.8,model2.1)
 ```
 
@@ -504,6 +502,17 @@ anova(model2.3,model2.4)
 summary(model2.4)
 ```
 
+```{r}
+model2.5 <-  lm(Gradrate ~ Funding + cApps + cTop10 + 
+                 cTuition + cRmBrd + cAlumni + cSpending + cStdScore + Region +
+               cTop10:cSpending + cApps:cRmBrd  + cApps:cStdScore 
+                 , data = colleges)
+
+anova(model2.4,model2.5)
+```
+```{r}
+summary(model2.5)
+```
 
 
 ```{r LastModelPlots}
